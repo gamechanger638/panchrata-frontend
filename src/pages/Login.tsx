@@ -34,7 +34,11 @@ export default function Login() {
       navigate(target, { replace: true });
 
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Invalid email or password");
+      if (!err.response) {
+        setError("Network Error: The backend might be waking up (it sleeps after 15 mins of inactivity). Please wait ~30 seconds and try again.");
+      } else {
+        setError(err.response?.data?.detail || "Invalid email or password");
+      }
     } finally {
       setLoading(false);
     }

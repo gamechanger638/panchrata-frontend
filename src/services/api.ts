@@ -30,11 +30,15 @@ api.interceptors.response.use(
           originalRequest.headers.Authorization = `Bearer ${newAccess}`;
           return api(originalRequest);
         }
-      } catch (err) {
-        // Refresh token died too
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('refreshToken');
-        window.location.href = '/login';
+      } catch (err: any) {
+        // If the refresh token is explicitly rejected (401/400), we log the user out.
+        // If the server is just sleeping (network error, no response, 502/504), don't delete tokens!
+        if (err.response && (err.response.status === 401 || err.response.status === 400)) {
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refreshToken');
+          window.location.href = '/login';
+        }
+        // Otherwise, just reject the promise and let them try again without losing their session
       }
     }
     return Promise.reject(error);
