@@ -28,9 +28,9 @@ export default function Login() {
       localStorage.setItem("refreshToken", refresh);
       login(access);
 
-      // Decode role and navigate ONCE here — RouteGuard is disabled
+      // Decode role and navigate to role-specific dashboard
       const decoded: { role: string } = jwtDecode(access);
-      const target = decoded.role === "super_admin" ? "/admin" : "/volunteer";
+      const target = `/${decoded.role.replace('_', '-')}`;
       navigate(target, { replace: true });
 
     } catch (err: any) {

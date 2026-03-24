@@ -21,8 +21,7 @@ import AdminPanel from "./pages/admin/AdminPanel";
 import NotFound from "./pages/NotFound";
 
 // Layouts
-import { AdminLayout } from "./components/admin/AdminLayout";
-import { VolunteerLayout } from "./components/volunteer/VolunteerLayout";
+import { RoleBasedLayout } from "./components/RoleBasedLayout";
 
 const queryClient = new QueryClient();
 
@@ -39,44 +38,32 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
 
-            {/* Admin Routes */}
-            <Route
-              path="/admin"
-              element={
-                <ProtectedRoute requireAdmin>
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<DashboardHome />} />
-              <Route path="families" element={<FamiliesPage />} />
-              <Route path="members" element={<MembersPage />} />
-              <Route path="panel" element={<AdminPanel />} />
-              <Route path="members/:id" element={<MemberProfile />} />
-              <Route path="family-tree" element={<FamilyTreePage />} />
-              <Route path="matching" element={<MarriageMatchingPage />} />
-              <Route path="directory" element={<CommunityDirectory />} />
-              <Route path="reports" element={<ReportsPage />} />
-            </Route>
+            {/* Dynamic Role-Based Routes */}
+            {['super_admin', 'state_admin', 'district_admin', 'zone_admin', 'vidhansabha_admin', 'ward_volunteer'].map((role) => (
+              <Route
+                key={role}
+                path={`/${role.replace('_', '-')}`}
+                element={
+                  <ProtectedRoute allowedRoles={[role]}>
+                    <RoleBasedLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<DashboardHome />} />
+                <Route path="families" element={<FamiliesPage />} />
+                <Route path="members" element={<MembersPage />} />
+                <Route path="panel" element={<AdminPanel />} />
+                <Route path="members/:id" element={<MemberProfile />} />
+                <Route path="family-tree" element={<FamilyTreePage />} />
+                <Route path="matching" element={<MarriageMatchingPage />} />
+                <Route path="directory" element={<CommunityDirectory />} />
+                <Route path="reports" element={<ReportsPage />} />
+              </Route>
+            ))}
 
-            {/* Volunteer Routes */}
-            <Route
-              path="/volunteer"
-              element={
-                <ProtectedRoute allowedRoles={['state_admin', 'district_admin', 'zone_admin', 'vidhansabha_admin', 'ward_volunteer']}>
-                  <VolunteerLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<DashboardHome />} />
-              <Route path="families" element={<FamiliesPage />} />
-              <Route path="members" element={<MembersPage />} />
-              <Route path="members/:id" element={<MemberProfile />} />
-              <Route path="family-tree" element={<FamilyTreePage />} />
-              <Route path="matching" element={<MarriageMatchingPage />} />
-              <Route path="directory" element={<CommunityDirectory />} />
-              <Route path="reports" element={<ReportsPage />} />
-            </Route>
+            {/* Legacy Redirects or fallback */}
+            <Route path="/admin" element={<Navigate to="/super-admin" replace />} />
+            <Route path="/volunteer" element={<Navigate to="/ward-volunteer" replace />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

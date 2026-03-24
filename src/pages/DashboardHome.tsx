@@ -124,7 +124,7 @@ const DashboardHome = () => {
                             <div className="mt-4 flex gap-2">
                               <Button variant="outline" size="sm" className="bg-white/10" onClick={() => window.location.reload()}>Retry Connection</Button>
                               <Button variant="outline" size="sm" className="bg-white/10" asChild>
-                                <Link to={user?.role === 'super_admin' ? '/admin/families' : '/volunteer/families'}>View Raw Data</Link>
+                                <Link to={`/${user?.role?.replace('_', '-')}/families`}>View Raw Data</Link>
                               </Button>
                             </div>
                         </div>
@@ -158,7 +158,7 @@ const DashboardHome = () => {
                     <Filter className="h-4 w-4" /> Filter View
                   </Button>
                   <Button size="sm" className="flex items-center gap-2" asChild>
-                    <Link to={user?.role === 'super_admin' ? '/admin/families' : '/volunteer/families'}>
+                    <Link to={`/${user?.role?.replace('_', '-')}/families`}>
                       <UserPlus className="h-4 w-4" /> Add New Family
                     </Link>
                   </Button>
@@ -311,7 +311,7 @@ const DashboardHome = () => {
                                       <span className="font-bold">{matrimony.popularAgeRange}</span>
                                     </div>
                                     <Button className="w-full mt-2" variant="outline" asChild>
-                                      <Link to={user?.role === 'super_admin' ? '/admin/matching' : '/volunteer/matching'}>
+                                      <Link to={`/${user?.role?.replace('_', '-')}/matching`}>
                                         Open Profiles <ChevronRight className="h-4 w-4 ml-1" />
                                       </Link>
                                     </Button>
@@ -371,11 +371,11 @@ const DashboardHome = () => {
                 <section>
                   <h2 className="text-lg font-heading font-bold mb-4">Quick Workspace Hub</h2>
                   <div className="grid grid-cols-2 gap-4">
-                      <HubButton icon={Users} label="Family DB" path={user?.role === 'super_admin' ? '/admin/families' : '/volunteer/families'} />
-                      <HubButton icon={BarChart3} label="View Analytics" path={user?.role === 'super_admin' ? '/admin/reports' : '/volunteer/reports'} />
+                      <HubButton icon={Users} label="Family DB" path={`/${user?.role?.replace('_', '-')}/families`} />
+                      <HubButton icon={BarChart3} label="View Analytics" path={`/${user?.role?.replace('_', '-')}/reports`} />
                       <HubButton icon={ClipboardList} label="Pending Tasks" path="#" disabled />
-                      {user?.role === 'super_admin' && <HubButton icon={Shield} label="User Control" path="/admin/panel" />}
-                      <HubButton icon={Search} label="Global Search" path={user?.role === 'super_admin' ? '/admin/directory' : '/volunteer/directory'} />
+                      {user?.role !== 'ward_volunteer' && <HubButton icon={Shield} label="User Control" path={`/${user?.role?.replace('_', '-')}/panel`} />}
+                      <HubButton icon={Search} label="Global Search" path={`/${user?.role?.replace('_', '-')}/directory`} />
                       <HubButton icon={MapPin} label="Area Map" path="#" disabled />
                   </div>
                 </section>

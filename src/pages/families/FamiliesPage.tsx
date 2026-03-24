@@ -9,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Search, Users, Plus, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
-import { getFamilies, createFamily, deleteFamily } from "@/services/familiesApi";
+import { getFamilies, createFamily, deleteFamily, updateFamily, getFamily } from "@/services/familiesApi";
 import { getLocations } from "@/services/locationsApi";
 import { getCommunities } from "@/services/communitiesApi";
+import { Pencil } from "lucide-react";
 
 export default function FamiliesPage() {
   const { user } = useAuth();
@@ -119,6 +120,46 @@ export default function FamiliesPage() {
     return true; 
   };
 
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const handleEditClick = async (id: string) => {
+    try {
+      setLoading(true);
+      const res = await getFamily(id);
+      const f = res.data;
+      setEditId(f.id);
+      setName(f.name || "");
+      setMobile(f.mobile || "");
+      setGotra(f.gotra || "");
+      setCommunityId(f.community || "");
+      setAddress(f.permanent_address || "");
+      setStateId(f.state || "");
+      setSambhagId(f.sambhag || "");
+      setLoksabhaId(f.loksabha || "");
+      setDistrictId(f.district || "");
+      setVidhansabhaId(f.vidhansabha || "");
+      setWardId(f.ward || "");
+      if (f.members && f.members.length > 0) {
+        setMembers(f.members.map((m: any) => ({
+          name: m.name || "",
+          relation: m.relation || "",
+          dob: m.dob || "",
+          education: m.education || "",
+          profession: m.profession || "",
+          marital_status: m.marital_status || "unmarried",
+          mobile: m.mobile || ""
+        })));
+      } else {
+        setMembers([{ name: '', relation: '', dob: '', education: '', profession: '', marital_status: 'unmarried', mobile: '' }]);
+      }
+      setIsOpen(true);
+    } catch (e) {
+      toast({ title: "त्रुटि (Error)", description: "परिवार का विवरण लोड करने में विफल।", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAddFamily = async () => {
     try {
       const payload = { 
@@ -136,13 +177,19 @@ export default function FamiliesPage() {
         members: members.filter(m => m.name.trim() !== "")
       };
       
-      await createFamily(payload);
+      if (editId) {
+        await updateFamily(editId, payload);
+        toast({ title: "परिवार सफलतापूर्वक अपडेट किया गया" });
+      } else {
+        await createFamily(payload);
+        toast({ title: "परिवार सफलतापूर्वक जोड़ा गया" });
+      }
 
-      toast({ title: "परिवार सफलतापूर्वक जोड़ा गया" });
       setIsOpen(false);
       fetchData();
       
       // Reset loosely
+      setEditId(null);
       setName(""); setMobile(""); setGotra(""); setAddress("");
       setMembers([{ name: '', relation: '', dob: '', education: '', profession: '', marital_status: 'unmarried', mobile: '' }]);
       if (canChangeLevel('state')) setStateId("");
@@ -193,12 +240,25 @@ export default function FamiliesPage() {
           <h1 className="text-2xl font-heading font-bold text-foreground">परिवार सूची (Families)</h1>
           <p className="text-sm text-muted-foreground mt-1">अपने क्षेत्र के परिवारों का विवरण और प्रबंधन करें</p>
         </div>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+          setIsOpen(open);
+          if (!open) {
+            setEditId(null); setName(""); setMobile(""); setGotra(""); setAddress("");
+            setMembers([{ name: '', relation: '', dob: '', education: '', profession: '', marital_status: 'unmarried', mobile: '' }]);
+            if (canChangeLevel('state')) setStateId("");
+            if (canChangeLevel('sambhag')) setSambhagId("");
+            if (canChangeLevel('loksabha')) setLoksabhaId("");
+            if (canChangeLevel('district')) setDistrictId("");
+            if (canChangeLevel('vidhansabha')) setVidhansabhaId("");
+            if (canChangeLevel('ward')) setWardId("");
+            if (user?.role === 'super_admin' || !user?.community_id) setCommunityId("");
+          }
+        }}>
           <DialogTrigger asChild>
             <Button><Plus className="h-4 w-4 mr-2" /> नया परिवार जोड़ें</Button>
           </DialogTrigger>
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[90vw]">
-            <DialogHeader><DialogTitle className="font-heading border-b pb-2">नया परिवार और सदस्य विवरण दर्ज करें</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading border-b pb-2">{editId ? "परिवार विवरण अपडेट करें" : "नया परिवार और सदस्य विवरण दर्ज करें"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-5 py-4">
               <div className="col-span-2"><Label>परिवार के मुखिया का नाम <span className="text-red-500">*</span></Label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="मुखिया का पूरा नाम दर्ज करें" className="mt-1" /></div>
               <div><Label>मोबाइल नंबर (Mobile)</Label><Input value={mobile} onChange={e=>setMobile(e.target.value)} placeholder="10-अंकीय मोबाइल नंबर" className="mt-1" /></div>
@@ -298,7 +358,31 @@ export default function FamiliesPage() {
                         </div>
                         <div className="col-span-2 lg:col-span-1">
                            <Label className="text-xs">रिश्ता</Label>
-                           <Input className="h-8 text-sm mt-1" value={m.relation} onChange={e => updateMember(index, 'relation', e.target.value)} placeholder="रिश्ता" />
+                           <Select value={m.relation} onValueChange={v => updateMember(index, 'relation', v)}>
+                             <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue placeholder="रिश्ता" /></SelectTrigger>
+                             <SelectContent>
+                                <SelectItem value="स्वयं (Self)">स्वयं (Self)</SelectItem>
+                                <SelectItem value="पिता (Father)">पिता (Father)</SelectItem>
+                                <SelectItem value="माँ (Mother)">माँ (Mother)</SelectItem>
+                                <SelectItem value="भाई (Brother)">भाई (Brother)</SelectItem>
+                                <SelectItem value="बहन (Sister)">बहन (Sister)</SelectItem>
+                                <SelectItem value="पति (Husband)">पति (Husband)</SelectItem>
+                                <SelectItem value="पत्नी (Wife)">पत्नी (Wife)</SelectItem>
+                                <SelectItem value="बेटा (Son)">बेटा (Son)</SelectItem>
+                                <SelectItem value="बेटी (Daughter)">बेटी (Daughter)</SelectItem>
+                                <SelectItem value="दादा (Grandfather)">दादा (Grandfather)</SelectItem>
+                                <SelectItem value="दादी (Grandmother)">दादी (Grandmother)</SelectItem>
+                                <SelectItem value="पोता (Grandson)">पोता (Grandson)</SelectItem>
+                                <SelectItem value="पोती (Granddaughter)">पोती (Granddaughter)</SelectItem>
+                                <SelectItem value="चाचा (Uncle)">चाचा (Uncle)</SelectItem>
+                                <SelectItem value="चाची (Aunt)">चाची (Aunt)</SelectItem>
+                                <SelectItem value="भतीजा (Nephew)">भतीजा (Nephew)</SelectItem>
+                                <SelectItem value="भतीजी (Niece)">भतीजी (Niece)</SelectItem>
+                                <SelectItem value="साला (Brother-in-law)">साला (Brother-in-law)</SelectItem>
+                                <SelectItem value="साली (Sister-in-law)">साली (Sister-in-law)</SelectItem>
+                                <SelectItem value="अन्य (Other)">अन्य (Other)</SelectItem>
+                             </SelectContent>
+                           </Select>
                         </div>
                         <div className="col-span-2 lg:col-span-1">
                            <Label className="text-xs">जन्म तिथि</Label>
@@ -306,11 +390,36 @@ export default function FamiliesPage() {
                         </div>
                         <div className="col-span-2 lg:col-span-1">
                            <Label className="text-xs">शिक्षा</Label>
-                           <Input className="h-8 text-sm mt-1" value={m.education} onChange={e => updateMember(index, 'education', e.target.value)} placeholder="शिक्षा" />
+                           <Select value={m.education} onValueChange={v => updateMember(index, 'education', v)}>
+                             <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue placeholder="चुने" /></SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="10th">10वीं</SelectItem>
+                               <SelectItem value="12th">12वीं</SelectItem>
+                               <SelectItem value="Graduation">स्नातक (Graduation)</SelectItem>
+                               <SelectItem value="Post Graduation">स्नातकोत्तर (Master)</SelectItem>
+                               <SelectItem value="PhD">पीएचडी (PhD)</SelectItem>
+                               <SelectItem value="ITI/Diploma">आईटीआई/डिप्लोमा</SelectItem>
+                               <SelectItem value="Uneducated">निरक्षर</SelectItem>
+                               <SelectItem value="Other">अन्य</SelectItem>
+                             </SelectContent>
+                           </Select>
                         </div>
                         <div className="col-span-2 lg:col-span-1">
                            <Label className="text-xs">व्यवसाय</Label>
-                           <Input className="h-8 text-sm mt-1" value={m.profession} onChange={e => updateMember(index, 'profession', e.target.value)} placeholder="व्यवसाय" />
+                           <Select value={m.profession} onValueChange={v => updateMember(index, 'profession', v)}>
+                             <SelectTrigger className="h-8 mt-1 text-sm"><SelectValue placeholder="चुने" /></SelectTrigger>
+                             <SelectContent>
+                               <SelectItem value="Business">व्यापार (Business)</SelectItem>
+                               <SelectItem value="Private Job">निजी नौकरी</SelectItem>
+                               <SelectItem value="Govt Job">सरकारी नौकरी</SelectItem>
+                               <SelectItem value="Student">विद्यार्थी</SelectItem>
+                               <SelectItem value="Agriculture">कृषि</SelectItem>
+                               <SelectItem value="Housewife">गृहिणी</SelectItem>
+                               <SelectItem value="Self Employed">स्व-रोजगार</SelectItem>
+                               <SelectItem value="Retired">निवृत्त</SelectItem>
+                               <SelectItem value="Other">अन्य</SelectItem>
+                             </SelectContent>
+                           </Select>
                         </div>
                         <div className="col-span-2 lg:col-span-1">
                            <Label className="text-xs">वैवाहिक स्थिति</Label>
@@ -381,11 +490,12 @@ export default function FamiliesPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    {user?.role === 'super_admin' && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(f.id)} title="हटाएं (Delete)">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleEditClick(f.id)} title="संपादित करें (Edit)">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(f.id)} title="हटाएं (Delete)">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

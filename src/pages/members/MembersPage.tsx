@@ -10,7 +10,7 @@ import { Eye, Pencil, Trash2, Plus, Search, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 import { useAuth } from "@/context/AuthContext";
-import { getMembers, createMember, deleteMember } from "@/services/membersApi";
+import { getMembers, createMember, deleteMember, updateMember } from "@/services/membersApi";
 import { getFamilies } from "@/services/familiesApi";
 
 export default function MembersPage() {
@@ -21,7 +21,8 @@ export default function MembersPage() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  // Add Member Form State
+  // Add/Edit Member Form State
+  const [editId, setEditId] = useState<string | null>(null);
   const [familyId, setFamilyId] = useState("");
   const [name, setName] = useState("");
   const [relation, setRelation] = useState("");
@@ -58,6 +59,19 @@ export default function MembersPage() {
     return m.name?.toLowerCase().includes(s) || m.mobile?.includes(s) || m.relation?.toLowerCase().includes(s);
   });
 
+  const handleEditClick = (m: any) => {
+    setEditId(m.id);
+    setFamilyId(m.family);
+    setName(m.name || "");
+    setRelation(m.relation || "");
+    setDob(m.dob || "");
+    setEducation(m.education || "");
+    setProfession(m.profession || "");
+    setMaritalStatus(m.marital_status || "");
+    setMobile(m.mobile || "");
+    setIsOpen(true);
+  };
+
   const handleAddMember = async () => {
     if (!familyId) {
       toast({ title: "कृपया एक परिवार चुनें (Please select a family)", variant: "destructive" });
@@ -65,13 +79,19 @@ export default function MembersPage() {
     }
     try {
       const payload = { family: familyId, name, relation, dob, education, profession, marital_status: maritalStatus, mobile };
-      await createMember(payload);
+      if (editId) {
+        await updateMember(editId, payload);
+        toast({ title: "सदस्य सफलतापूर्वक अपडेट किया गया (Member updated successfully)" });
+      } else {
+        await createMember(payload);
+        toast({ title: "सदस्य सफलतापूर्वक जोड़ा गया (Member added successfully)" });
+      }
 
-      toast({ title: "सदस्य सफलतापूर्वक जोड़ा गया (Member added successfully)" });
       setIsOpen(false);
       fetchData();
       
       // Reset loosely
+      setEditId(null);
       setName(""); setRelation(""); setDob(""); setEducation(""); setProfession(""); setMaritalStatus(""); setMobile("");
     } catch (e: any) {
       const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
@@ -95,10 +115,13 @@ export default function MembersPage() {
           <h1 className="text-2xl font-heading font-bold text-foreground">सदस्य सूची (Members)</h1>
           <p className="text-sm text-muted-foreground mt-1">अपने क्षेत्र के सभी सदस्यों का विवरण प्रबंधित करें</p>
         </div>
-        <Dialog open={isOpen} onOpenChange={setIsOpen}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+          setIsOpen(open);
+          if (!open) { setEditId(null); setName(""); setRelation(""); setDob(""); setEducation(""); setProfession(""); setMaritalStatus(""); setMobile(""); setFamilyId(""); }
+        }}>
           <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" /> नया सदस्य जोड़ें</Button></DialogTrigger>
           <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading border-b pb-2">नया सदस्य विवरण दर्ज करें</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle className="font-heading border-b pb-2">{editId ? "सदस्य विवरण अपडेट करें (Update Member)" : "नया सदस्य विवरण दर्ज करें (Add Member)"}</DialogTitle></DialogHeader>
             <div className="grid grid-cols-2 gap-5 py-4">
               <div className="col-span-2">
                 <Label>परिवार का चयन करें (Select Family) <span className="text-red-500">*</span></Label>
@@ -114,11 +137,69 @@ export default function MembersPage() {
               
               <div className="col-span-2"><Label>पूरा नाम (Full Name) <span className="text-red-500">*</span></Label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="व्यक्ति का पूरा नाम" className="mt-1" /></div>
               
-              <div><Label>मुखिया से रिश्ता (Relation)</Label><Input value={relation} onChange={e=>setRelation(e.target.value)} placeholder="जैसे: बेटा, पत्नी, भाई..." className="mt-1" /></div>
+              <div>
+                <Label>मुखिया से रिश्ता (Relation)</Label>
+                <Select value={relation} onValueChange={setRelation}>
+                  <SelectTrigger className="mt-1"><SelectValue placeholder="रिश्ता चुनें (Select Relation)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="स्वयं (Self)">स्वयं (Self)</SelectItem>
+                    <SelectItem value="पिता (Father)">पिता (Father)</SelectItem>
+                    <SelectItem value="माँ (Mother)">माँ (Mother)</SelectItem>
+                    <SelectItem value="भाई (Brother)">भाई (Brother)</SelectItem>
+                    <SelectItem value="बहन (Sister)">बहन (Sister)</SelectItem>
+                    <SelectItem value="पति (Husband)">पति (Husband)</SelectItem>
+                    <SelectItem value="पत्नी (Wife)">पत्नी (Wife)</SelectItem>
+                    <SelectItem value="बेटा (Son)">बेटा (Son)</SelectItem>
+                    <SelectItem value="बेटी (Daughter)">बेटी (Daughter)</SelectItem>
+                    <SelectItem value="दादा (Grandfather)">दादा (Grandfather)</SelectItem>
+                    <SelectItem value="दादी (Grandmother)">दादी (Grandmother)</SelectItem>
+                    <SelectItem value="पोता (Grandson)">पोता (Grandson)</SelectItem>
+                    <SelectItem value="पोती (Granddaughter)">पोती (Granddaughter)</SelectItem>
+                    <SelectItem value="चाचा (Uncle)">चाचा (Uncle)</SelectItem>
+                    <SelectItem value="चाची (Aunt)">चाची (Aunt)</SelectItem>
+                    <SelectItem value="भतीजा (Nephew)">भतीजा (Nephew)</SelectItem>
+                    <SelectItem value="भतीजी (Niece)">भतीजी (Niece)</SelectItem>
+                    <SelectItem value="साला (Brother-in-law)">साला (Brother-in-law)</SelectItem>
+                    <SelectItem value="साली (Sister-in-law)">साली (Sister-in-law)</SelectItem>
+                    <SelectItem value="अन्य (Other)">अन्य (Other)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div><Label>जन्म तिथि (DOB)</Label><Input type="date" value={dob} onChange={e=>setDob(e.target.value)} className="mt-1" /></div>
               
-              <div><Label>शिक्षा (Education)</Label><Input value={education} onChange={e=>setEducation(e.target.value)} placeholder="शैक्षिक योग्यता" className="mt-1" /></div>
-              <div><Label>व्यवसाय / पेशा (Profession)</Label><Input value={profession} onChange={e=>setProfession(e.target.value)} placeholder="काम / व्यापार" className="mt-1" /></div>
+              <div>
+                <Label>शिक्षा (Education)</Label>
+                <Select value={education} onValueChange={setEducation}>
+                  <SelectTrigger className="mt-1 font-normal"><SelectValue placeholder="चुने" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10th">10वीं</SelectItem>
+                    <SelectItem value="12th">12वीं</SelectItem>
+                    <SelectItem value="Graduation">स्नातक (Graduation)</SelectItem>
+                    <SelectItem value="Post Graduation">स्नातकोत्तर (Master)</SelectItem>
+                    <SelectItem value="PhD">पीएचडी (PhD)</SelectItem>
+                    <SelectItem value="ITI/Diploma">आईटीआई/डिप्लोमा</SelectItem>
+                    <SelectItem value="Uneducated">निरक्षर</SelectItem>
+                    <SelectItem value="Other">अन्य</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>व्यवसाय / पेशा (Profession)</Label>
+                <Select value={profession} onValueChange={setProfession}>
+                  <SelectTrigger className="mt-1 font-normal"><SelectValue placeholder="चुने" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Business">व्यापार (Business)</SelectItem>
+                    <SelectItem value="Private Job">निजी नौकरी</SelectItem>
+                    <SelectItem value="Govt Job">सरकारी नौकरी</SelectItem>
+                    <SelectItem value="Student">विद्यार्थी</SelectItem>
+                    <SelectItem value="Agriculture">कृषि</SelectItem>
+                    <SelectItem value="Housewife">गृहिणी</SelectItem>
+                    <SelectItem value="Self Employed">स्व-रोजगार</SelectItem>
+                    <SelectItem value="Retired">निवृत्त</SelectItem>
+                    <SelectItem value="Other">अन्य</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               
               <div>
                 <Label>वैवाहिक स्थिति (Marital Status)</Label>
@@ -133,7 +214,7 @@ export default function MembersPage() {
               
               <div><Label>मोबाइल (Mobile)</Label><Input value={mobile} onChange={e=>setMobile(e.target.value)} placeholder="10-अंकीय नंबर " className="mt-1" /></div>
               
-              <div className="col-span-2 mt-2"><Button className="w-full" size="lg" onClick={handleAddMember} disabled={!familyId || !name}>सदस्य सहेजें (Save)</Button></div>
+              <div className="col-span-2 mt-2"><Button className="w-full" size="lg" onClick={handleAddMember} disabled={!familyId || !name}>{editId ? "सदस्य अपडेट करें (Update)" : "सदस्य सहेजें (Save)"}</Button></div>
             </div>
           </DialogContent>
         </Dialog>
@@ -186,11 +267,12 @@ export default function MembersPage() {
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
-                    {user?.role === 'super_admin' && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(m.id)} title="हटाएं (Delete)">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleEditClick(m)} title="संपादित करें (Edit)">
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(m.id)} title="हटाएं (Delete)">
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { 
   Shield, Users, MapPin, Building2, Plus, Pencil, Trash2
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getUsers, createUser, updateUser, deleteUser } from '@/services/usersApi';
 import { getLocations, createLocation, updateLocation, deleteLocation } from '@/services/locationsApi';
@@ -24,6 +25,7 @@ interface AdminStats {
 }
 
 export default function AdminPanel() {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [users, setUsers] = useState<any[]>([]);
@@ -309,8 +311,8 @@ export default function AdminPanel() {
       <Tabs defaultValue="users" className="w-full">
         <TabsList className="bg-muted px-1.5 py-1 rounded-xl">
           <TabsTrigger value="users" className="gap-2 px-6"><Users className="h-4 w-4" /> उपयोगकर्ता (Users)</TabsTrigger>
-          <TabsTrigger value="communities" className="gap-2 px-6"><Building2 className="h-4 w-4" /> समुदाय (Communities)</TabsTrigger>
-          <TabsTrigger value="locations" className="gap-2 px-6"><MapPin className="h-4 w-4" /> स्थान (Locations)</TabsTrigger>
+          {user?.role === 'super_admin' && <TabsTrigger value="communities" className="gap-2 px-6"><Building2 className="h-4 w-4" /> समुदाय (Communities)</TabsTrigger>}
+          {user?.role === 'super_admin' && <TabsTrigger value="locations" className="gap-2 px-6"><MapPin className="h-4 w-4" /> स्थान (Locations)</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="users" className="mt-6 space-y-6">
@@ -335,11 +337,11 @@ export default function AdminPanel() {
                                     <Select value={userRole} onValueChange={(v) => { setUserRole(v); setLocHierarchy({state:"", sambhag:"", loksabha:"", district:"", zone:"", vidhansabha:"", ward:""}); }}>
                                         <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="super_admin">सुपर एडमिन (Super Admin)</SelectItem>
-                                            <SelectItem value="state_admin">राज्य एडमिन (State Admin)</SelectItem>
-                                            <SelectItem value="district_admin">ज़िला एडमिन (District Admin)</SelectItem>
-                                            <SelectItem value="zone_admin">ज़ोन एडमिन (Zone Admin)</SelectItem>
-                                            <SelectItem value="vidhansabha_admin">विधानसभा एडमिन (Vidhansabha Admin)</SelectItem>
+                                            {user?.role === 'super_admin' && <SelectItem value="super_admin">सुपर एडमिन (Super Admin)</SelectItem>}
+                                            {['super_admin'].includes(user?.role || '') && <SelectItem value="state_admin">राज्य एडमिन (State Admin)</SelectItem>}
+                                            {['super_admin', 'state_admin'].includes(user?.role || '') && <SelectItem value="district_admin">ज़िला एडमिन (District Admin)</SelectItem>}
+                                            {['super_admin', 'state_admin', 'district_admin'].includes(user?.role || '') && <SelectItem value="zone_admin">ज़ोन एडमिन (Zone Admin)</SelectItem>}
+                                            {['super_admin', 'state_admin', 'district_admin'].includes(user?.role || '') && <SelectItem value="vidhansabha_admin">विधानसभा एडमिन (Vidhansabha Admin)</SelectItem>}
                                             <SelectItem value="ward_volunteer">वार्ड स्वयंसेवक (Ward Volunteer)</SelectItem>
                                         </SelectContent>
                                     </Select>
