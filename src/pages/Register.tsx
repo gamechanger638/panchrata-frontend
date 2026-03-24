@@ -10,6 +10,7 @@ import { Hexagon } from "lucide-react";
 export default function Register() {
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [mobile, setMobile] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -24,7 +25,7 @@ export default function Register() {
       const response = await fetch(`${API_BASE_URL}/auth/register/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, mobile, password }),
+        body: JSON.stringify({ name, email, mobile, password }),
       });
 
       if (!response.ok) {
@@ -52,6 +53,7 @@ export default function Register() {
           <form onSubmit={handleRegister} className="space-y-4">
             {error && <div className="text-red-500 text-sm text-center">{error}</div>}
             <div><Label>Full Name</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="Your name" required /></div>
+            <div><Label>Email</Label><Input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email address" required /></div>
             <div><Label>Mobile</Label><Input value={mobile} onChange={e => setMobile(e.target.value)} placeholder="Mobile number" required /></div>
             <div><Label>Password</Label><Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" required /></div>
             <Button type="submit" className="w-full" disabled={loading}>{loading ? "Registering..." : "Register"}</Button>
