@@ -27,7 +27,7 @@ export function ProfileCard({ member, showMatchButton = false }: ProfileCardProp
         </div>
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" className="flex-1" asChild>
-            <Link to={`/dashboard/members/${member.id}`}><Eye className="h-3.5 w-3.5 mr-1" /> View</Link>
+            <Link to={`../members/${member.id}`}><Eye className="h-3.5 w-3.5 mr-1" /> View</Link>
           </Button>
           {showMatchButton && (
             <Button size="sm" className="flex-1">

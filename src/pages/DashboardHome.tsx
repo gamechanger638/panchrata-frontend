@@ -1,426 +1,393 @@
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useMemo } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Link } from 'react-router-dom';
-import {
-    Users,
-    UserPlus,
-    Heart,
-    TrendingUp,
-    TrendingDown,
-    Minus,
-    BarChart3,
-    AlertTriangle,
-    FileText,
-    MapPin,
-    Activity,
-    ClipboardList,
-    ChevronRight,
-    Search,
-    Filter,
-    Shield
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { 
+    Users, UserPlus, Heart, TrendingUp, BarChart3, 
+    Download, Calendar, MapPin, Briefcase, GraduationCap, 
+    Filter, X, Search, Activity, UserCheck, UserX, Lightbulb
 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { 
+    LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+    PieChart, Pie, Cell, BarChart, Bar, Legend 
+} from 'recharts';
 import { dashboardAPI } from '@/services/dashboardApi';
+import { getLocations } from '@/services/locationsApi';
+import { useToast } from '@/hooks/use-toast';
+import { Badge } from '@/components/ui/badge';
 
-// Interfaces for our Production Community Dashboard
-interface CommunityInsights {
-    overview: {
-        totalFamilies: number;
-        totalMembers: number;
-        unmarriedProfiles: number;
-        activeLocations: number;
-        growthRate: number;
-        growthTrend: 'up' | 'down' | 'neutral';
-        dataCompletionRate: number;
-    };
-    genderDistribution: {
-        males: number;
-        females: number;
-        ratio: string;
-    };
-    geographicRisks: {
-        unmappedFamilies: { area: string; count: number }[];
-        inactiveWards: { ward: string; lastActivity: string }[];
-        lowCoverageZones: { zone: string; percentage: number }[];
-    };
-    matrimonialIntelligence: {
-        newProfilesThisWeek: number;
-        popularAgeRange: string;
-        pendingVerifications: number;
-        successfulMatchesThisMonth: number;
-    };
-    recentActivity: {
-        type: 'registration' | 'update' | 'match' | 'location';
-        text: string;
-        time: string;
-    }[];
-    quickStats: {
-        verifiedMembers: number;
-        totalCasteCategories: number;
-        digitalvotersCount: number;
-    };
-}
+const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#0088FE', '#00C49F', '#FFBB28', '#FF8042'];
 
-const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'neutral' }) => {
-    if (trend === 'up') return <TrendingUp className="h-4 w-4 text-green-600" />;
-    if (trend === 'down') return <TrendingDown className="h-4 w-4 text-red-600" />;
-    return <Minus className="h-4 w-4 text-muted-foreground" />;
+type FilterState = {
+    state: string;
+    district: string;
+    ward: string;
+    profession: string;
+    education: string;
+    gender: string;
+    status: string;
+    date_from: string;
+    date_to: string;
 };
 
 const DashboardHome = () => {
-    const { user } = useAuth();
+    const { toast } = useToast();
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [insights, setInsights] = useState<CommunityInsights | null>(null);
+    const [data, setData] = useState<any>(null);
+    const [locations, setLocations] = useState<any[]>([]);
+    const [filters, setFilters] = useState<FilterState>({
+        state: "",
+        district: "",
+        ward: "",
+        profession: "",
+        education: "",
+        gender: "",
+        status: "",
+        date_from: "",
+        date_to: "",
+    });
+
+    const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+    const fetchAnalytics = async (f: FilterState) => {
+        try {
+            setLoading(true);
+            const cleanFilters = Object.fromEntries(Object.entries(f).filter(([_, v]) => v !== ""));
+            const res = await dashboardAPI.getDashboardInsights(cleanFilters);
+            setData(res.data);
+        } catch (e) {
+            toast({ title: "डेटा लोड करने में विफल (Failed to load data)", variant: "destructive" });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const fetchInitialData = async () => {
+        try {
+            const locRes = await getLocations();
+            setLocations(locRes.data.results || locRes.data || []);
+            fetchAnalytics(filters);
+        } catch (e) {}
+    };
 
     useEffect(() => {
-        const fetchInsights = async () => {
-            try {
-                setLoading(true);
-                setError(null);
-                const response = await dashboardAPI.getDashboardInsights();
-                setInsights(response.data);
-            } catch (err: unknown) {
-                console.error('Failed to fetch Dashboard insights:', err);
-                const e = err as { response?: { data?: { detail?: string }; status?: number } };
-                const msg = e.response?.data?.detail || 'Failed to load community insights. Please ensure the backend is running.';
-                setError(msg);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchInsights();
+        fetchInitialData();
     }, []);
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center p-8 h-[60vh]">
-                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
-            </div>
-        );
-    }
+    const handleFilterChange = (key: keyof FilterState, value: string) => {
+        const newFilters = { ...filters, [key]: value };
+        setFilters(newFilters);
+        fetchAnalytics(newFilters);
+    };
 
-    if (error) {
-        return (
-            <div className="p-4 md:p-8">
-                <div className="mb-8">
-                    <h1 className="text-3xl font-bold font-heading text-foreground mb-2">Community Dashboard</h1>
-                </div>
-                <Alert variant="destructive" className="max-w-2xl border-2">
-                    <AlertTriangle className="h-5 w-5" />
-                    <AlertTitle className="font-heading font-semibold">Connection Error</AlertTitle>
-                    <AlertDescription className="mt-2 text-sm leading-relaxed">
-                        {error}
-                        <div className="mt-4 pt-4 border-t border-destructive/20">
-                            <p className="font-semibold mb-2 italic text-xs uppercase tracking-wider">Debug Info:</p>
-                            <ul className="text-xs space-y-1 opacity-90">
-                                <li>Logged as: <Badge variant="outline" className="text-[10px] ml-1">{user?.role?.toUpperCase()}</Badge></li>
-                                <li>Endpoint: /api/dashboard/insights/</li>
-                            </ul>
-                            <div className="mt-4 flex gap-2">
-                              <Button variant="outline" size="sm" className="bg-white/10" onClick={() => window.location.reload()}>Retry Connection</Button>
-                              <Button variant="outline" size="sm" className="bg-white/10" asChild>
-                                <Link to={`/${user?.role?.replace('_', '-')}/families`}>View Raw Data</Link>
-                              </Button>
-                            </div>
-                        </div>
-                    </AlertDescription>
-                </Alert>
-            </div>
-        );
-    }
+    const clearFilters = () => {
+        const emptyFilters = {
+            state: "", district: "", ward: "", profession: "", education: "",
+            gender: "", status: "", date_from: "", date_to: ""
+        };
+        setFilters(emptyFilters);
+        fetchAnalytics(emptyFilters);
+    };
 
-    const data = insights!;
-    const overview = data.overview;
-    const gender = data.genderDistribution;
-    const geoRisks = data.geographicRisks;
-    const matrimony = data.matrimonialIntelligence;
-    const stats = data.quickStats;
+    const handleExport = async (format: 'excel' | 'csv', type: 'member' | 'family') => {
+        try {
+            const cleanFilters = Object.fromEntries(Object.entries(filters).filter(([_, v]) => v !== ""));
+            const res = await dashboardAPI.exportReport({ ...cleanFilters, format, type });
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `${type}_report_${new Date().toISOString().split('T')[0]}.${format === 'excel' ? 'xlsx' : 'csv'}`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+        } catch (e) {
+            toast({ title: "निर्यात विफल (Export Failed)", variant: "destructive" });
+        }
+    };
 
-    const totalRisks = geoRisks.unmappedFamilies.length + geoRisks.inactiveWards.length + geoRisks.lowCoverageZones.length;
+    const states = useMemo(() => locations.filter(l => l.type === 'state'), [locations]);
+    const districts = useMemo(() => {
+        if (!filters.state) return [];
+        return locations.filter(l => l.type === 'district' && l.parent === filters.state);
+    }, [locations, filters.state]);
+
+    if (loading && !data) return <div className="h-[80vh] flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" /></div>;
+
+    const metrics = data?.metrics || {};
+    const charts = data?.charts || {};
+    const insights = data?.insights || {};
 
     return (
-        <div className="p-4 md:p-8 space-y-8 animate-fade-in">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-heading font-bold text-foreground">Community Dashboard</h1>
-                    <p className="text-muted-foreground mt-1">
-                        Panchratna Census Analytics — Real-time Health Snapshot
-                    </p>
+        <div className="p-4 md:p-8 space-y-8 bg-[#f8fafc] min-h-screen">
+            {/* Header & Sticky Filter Bar */}
+            <div className="sticky top-0 z-10 -mx-4 md:-mx-8 px-4 md:px-8 py-4 bg-white/80 backdrop-blur-md border-b shadow-sm">
+                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-heading font-bold text-slate-900">Admin Analytics Dashboard</h1>
+                        <p className="text-sm text-slate-500">Real-time community metrics and advanced reporting</p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <Button 
+                            variant={isFilterOpen ? "default" : "outline"} 
+                            className="rounded-xl gap-2"
+                            onClick={() => setIsFilterOpen(!isFilterOpen)}
+                        >
+                            <Filter className="h-4 w-4" /> 
+                            {isFilterOpen ? "फ़िल्टर छिपाएं" : "फ़िल्टर दिखाएं"}
+                        </Button>
+                        <div className="flex gap-2">
+                            <Select onValueChange={(v) => handleExport(v as any, 'member')}>
+                                <SelectTrigger className="w-[140px] rounded-xl bg-primary text-primary-foreground">
+                                    <Download className="h-4 w-4 mr-2" /> <SelectValue placeholder="निर्यात (Export)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="excel">Excel (.xlsx)</SelectItem>
+                                    <SelectItem value="csv">CSV (.csv)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" className="hidden sm:flex items-center gap-2">
-                    <Filter className="h-4 w-4" /> Filter View
-                  </Button>
-                  <Button size="sm" className="flex items-center gap-2" asChild>
-                    <Link to={`/${user?.role?.replace('_', '-')}/families`}>
-                      <UserPlus className="h-4 w-4" /> Add New Family
-                    </Link>
-                  </Button>
-                </div>
+
+                {isFilterOpen && (
+                    <div className="max-w-7xl mx-auto mt-4 p-4 bg-slate-50 rounded-2xl border border-slate-200 animate-in slide-in-from-top-2">
+                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">राज्य (State)</label>
+                                <Select value={filters.state} onValueChange={v => handleFilterChange('state', v)}>
+                                    <SelectTrigger className="bg-white"><SelectValue placeholder="सभी" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_none">सभी</SelectItem>
+                                        {states.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">जिला (District)</label>
+                                <Select value={filters.district} onValueChange={v => handleFilterChange('district', v)} disabled={!filters.state}>
+                                    <SelectTrigger className="bg-white"><SelectValue placeholder="सभी" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_none">सभी</SelectItem>
+                                        {districts.map(d => <SelectItem key={d.id} value={d.id}>{d.name}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">व्यवसाय (Profession)</label>
+                                <Select value={filters.profession} onValueChange={v => handleFilterChange('profession', v)}>
+                                    <SelectTrigger className="bg-white"><SelectValue placeholder="सभी" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_none">सभी</SelectItem>
+                                        {['Student', 'Engineer', 'Doctor', 'Advocate', 'Business', 'Farmer', 'Housewife', 'Govt Job', 'Other'].map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-bold uppercase text-slate-400">लिंग (Gender)</label>
+                                <Select value={filters.gender} onValueChange={v => handleFilterChange('gender', v)}>
+                                    <SelectTrigger className="bg-white"><SelectValue placeholder="सभी" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all_none">सभी</SelectItem>
+                                        <SelectItem value="male">पुरुष</SelectItem>
+                                        <SelectItem value="female">महिला</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="flex items-end">
+                                <Button variant="ghost" className="w-full text-slate-500 rounded-xl" onClick={clearFilters}>
+                                    <X className="h-4 w-4 mr-2" /> साफ़ करें
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {/* 1. Summary Cards Grid */}
-            <section className="animate-in slide-in-from-bottom-2 duration-500">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <Card className="glass-card border-none hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-5 flex justify-between items-start">
-                            <div>
-                                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Families</p>
-                                <p className="text-3xl font-bold mt-1">{overview.totalFamilies}</p>
-                                <div className="mt-2 flex items-center gap-1">
-                                    <TrendIcon trend={overview.growthTrend} />
-                                    <span className="text-[10px] font-medium text-muted-foreground">+{overview.growthRate}% monthly</span>
-                                </div>
-                            </div>
-                            <div className="p-2 bg-primary/10 rounded-xl text-primary">
-                                <Users className="h-6 w-6" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="glass-card border-none hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-5 flex justify-between items-start">
-                            <div>
-                                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Total Members</p>
-                                <p className="text-3xl font-bold mt-1">{overview.totalMembers}</p>
-                                <div className="mt-2 flex items-center gap-1">
-                                    <span className="text-[10px] font-medium text-muted-foreground">M:F Ratio — </span>
-                                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">{gender.ratio}</Badge>
-                                </div>
-                            </div>
-                            <div className="p-2 bg-secondary/10 rounded-xl text-secondary">
-                                <Activity className="h-6 w-6" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="glass-card border-none hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-5 flex justify-between items-start">
-                            <div>
-                                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Matrimonial Profiles</p>
-                                <p className="text-3xl font-bold mt-1 text-primary">{overview.unmarriedProfiles}</p>
-                                <div className="mt-2 flex items-center gap-1">
-                                    <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                                    <span className="text-[10px] font-medium text-muted-foreground">{matrimony.newProfilesThisWeek} new this week</span>
-                                </div>
-                            </div>
-                            <div className="p-2 bg-accent/10 rounded-xl text-accent">
-                                <Heart className="h-6 w-6" />
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    <Card className="glass-card border-none hover:shadow-lg transition-all duration-300">
-                        <CardContent className="p-5 flex justify-between items-start">
-                            <div>
-                                <p className="text-xs uppercase font-semibold text-muted-foreground tracking-wider">Data Completion</p>
-                                <p className="text-3xl font-bold mt-1">{overview.dataCompletionRate}%</p>
-                                <div className="mt-3 w-full max-w-[100px]">
-                                  <Progress value={overview.dataCompletionRate} className="h-1.5" />
-                                </div>
-                            </div>
-                            <div className="p-2 bg-orange-500/10 rounded-xl text-orange-600">
-                                <BarChart3 className="h-6 w-6" />
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
-            </section>
-
-            {/* 2. Insights + 3. Matrimonial Snapshot */}
-            <div className="grid lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 space-y-6">
-                    <section>
-                        <h2 className="text-lg font-heading font-bold mb-4 flex items-center gap-2">
-                            <MapPin className="h-5 w-5 text-gray-400" /> Geographic Insights
-                        </h2>
-                        <div className="grid sm:grid-cols-2 gap-4">
-                           <Card className="glass-card border-none">
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-semibold">Coverage by Ward</CardTitle>
-                              </CardHeader>
-                              <CardContent className="space-y-4">
-                                  {geoRisks.lowCoverageZones.map((zone, i) => (
-                                    <div key={i} className="space-y-1.5">
-                                      <div className="flex justify-between text-xs font-medium">
-                                        <span>{zone.zone}</span>
-                                        <span className={zone.percentage < 50 ? "text-destructive" : "text-muted-foreground"}>{zone.percentage}%</span>
-                                      </div>
-                                      <Progress value={zone.percentage} className={`h-1.5 ${zone.percentage < 50 ? "bg-red-100 dark:bg-red-950/20" : ""}`} />
-                                    </div>
-                                  ))}
-                              </CardContent>
-                           </Card>
-                           
-                           <Card className="glass-card border-none relative overflow-hidden group">
-                              <CardHeader className="pb-2">
-                                <CardTitle className="text-sm font-semibold">Growth Analytics</CardTitle>
-                              </CardHeader>
-                              <CardContent className="h-32 flex flex-col justify-end">
-                                <div className="flex items-end gap-1 h-20">
-                                    {[40, 60, 45, 70, 85, 65, 90].map((h, i) => (
-                                      <div key={i} className="flex-1 bg-primary/20 hover:bg-primary transition-colors rounded-t-sm" style={{ height: `${h}%` }} />
-                                    ))}
-                                </div>
-                                <p className="text-[10px] text-muted-foreground text-center mt-3 uppercase tracking-tighter">Last 7 months registration trend</p>
-                              </CardContent>
-                           </Card>
-                        </div>
-                    </section>
-
-                    <section>
-                      <h2 className="text-lg font-heading font-bold mb-4 flex items-center gap-2">
-                        <AlertTriangle className="h-5 w-5 text-amber-500" /> Critical Data Gaps
-                      </h2>
-                      <Card className="border-amber-500/20 bg-amber-500/[0.02]">
-                        <CardContent className="p-0">
-                          <TableComponent risks={geoRisks} />
-                        </CardContent>
-                      </Card>
-                    </section>
-                </div>
-
-                <div className="space-y-6">
-                  <section>
-                        <h2 className="text-lg font-heading font-bold mb-4">Matrimonial Health</h2>
-                        <Card className="glass-card border-none bg-accent/5">
-                            <CardContent className="p-6 space-y-5">
-                                <div className="flex items-center gap-4">
-                                  <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center text-red-500">
-                                    <Heart className="h-6 w-6 fill-red-500" />
-                                  </div>
-                                  <div>
-                                    <p className="text-sm font-semibold">Matched This Month</p>
-                                    <p className="text-2xl font-bold">{matrimony.successfulMatchesThisMonth}</p>
-                                  </div>
-                                </div>
-                                
-                                <div className="space-y-4 pt-2 border-t border-accent/10">
-                                    <div className="flex justify-between items-center text-sm">
-                                      <span className="text-muted-foreground font-medium">Pending Verification</span>
-                                      <Badge variant="destructive" className="h-5">{matrimony.pendingVerifications}</Badge>
-                                    </div>
-                                    <div className="flex justify-between items-center text-sm">
-                                      <span className="text-muted-foreground font-medium">Popular Age Range</span>
-                                      <span className="font-bold">{matrimony.popularAgeRange}</span>
-                                    </div>
-                                    <Button className="w-full mt-2" variant="outline" asChild>
-                                      <Link to={`/${user?.role?.replace('_', '-')}/matching`}>
-                                        Open Profiles <ChevronRight className="h-4 w-4 ml-1" />
-                                      </Link>
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                  </section>
-
-                  <section>
-                        <h2 className="text-lg font-heading font-bold mb-4">Quick Stats</h2>
-                        <div className="space-y-3">
-                           {[
-                             { label: 'Verified Members', value: stats.verifiedMembers, icon: UserPlus },
-                             { label: 'Caste Categories', value: stats.totalCasteCategories, icon: Filter },
-                             { label: 'Digital IDs Issued', value: stats.digitalvotersCount, icon: FileText }
-                           ].map((item, i) => (
-                             <Card key={i} className="glass-card border-none hover:bg-accent/5 cursor-default transition-colors">
-                               <CardContent className="p-3 flex items-center gap-3">
-                                 <div className="p-1.5 bg-muted rounded-md text-muted-foreground"><item.icon className="h-4 w-4" /></div>
-                                 <div className="flex-1">
-                                   <p className="text-[10px] text-muted-foreground uppercase font-bold tracking-tight">{item.label}</p>
-                                   <p className="text-sm font-bold">{item.value.toLocaleString()}</p>
-                                 </div>
-                               </CardContent>
-                             </Card>
-                           ))}
-                        </div>
-                  </section>
-                </div>
+            {/* KPI Metrics Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <MetricCard 
+                    title="कुल परिवार (Total Families)" 
+                    value={metrics.totalFamilies} 
+                    icon={Users} 
+                    color="blue"
+                    subText={`आज +${metrics.newRegistrations?.today || 0}`}
+                />
+                <MetricCard 
+                    title="कुल सदस्य (Total Members)" 
+                    value={metrics.totalMembers} 
+                    icon={UserPlus} 
+                    color="purple"
+                    subText={`${metrics.newRegistrations?.last7Days || 0} पिछले 7 दिनों में`}
+                />
+                <MetricCard 
+                    title="सक्रिय सदस्य (Active Members)" 
+                    value={metrics.activeMembers} 
+                    icon={UserCheck} 
+                    color="green"
+                    subText={`${((metrics.activeMembers/metrics.totalMembers)*100).toFixed(1)}% सक्रियता`}
+                />
+                <MetricCard 
+                    title="निष्क्रिय सदस्य (Inactive)" 
+                    value={metrics.inactiveMembers} 
+                    icon={UserX} 
+                    color="orange"
+                    subText="सत्यापन लंबित (Pending Verification)"
+                />
             </div>
 
-            {/* 4. Activity Feed & Actions Grid */}
-            <div className="grid md:grid-cols-2 gap-6">
-                <section>
-                  <h2 className="text-lg font-heading font-bold mb-4 flex items-center gap-2">
-                    <Activity className="h-5 w-5 text-gray-400" /> Recent Activity
-                  </h2>
-                  <Card className="glass-card border-none max-h-[400px] overflow-y-auto">
-                    <CardContent className="p-2">
-                      {data.recentActivity.map((activity, i) => (
-                        <div key={i} className="flex gap-4 p-3 rounded-lg hover:bg-muted/30 transition-colors border-b last:border-0 border-muted/50">
-                          <div className={`mt-1 h-2 w-2 rounded-full shrink-0 ${
-                            activity.type === 'registration' ? 'bg-green-500' : 
-                            activity.type === 'match' ? 'bg-red-500' : 
-                            activity.type === 'location' ? 'bg-blue-500' : 'bg-gray-500'
-                          }`} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground">{activity.text}</p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">{activity.time}</p>
-                          </div>
-                        </div>
-                      ))}
+            {/* Main Charts Section */}
+            <div className="grid lg:grid-cols-3 gap-8">
+                {/* Growth Trend Chart */}
+                <Card className="lg:col-span-2 rounded-2xl shadow-sm border-none bg-white overflow-hidden">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                             <TrendingUp className="h-5 w-5 text-primary" /> सदस्य वृद्धि रुझान (Member Growth Trend)
+                        </CardTitle>
+                        <CardDescription>पिछले 31 दिनों के पंजीकरण (Daily Registrations)</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[350px] p-6 pt-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={charts.growthTrend}>
+                                <defs>
+                                    <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.1}/>
+                                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                                />
+                                <Line 
+                                    type="monotone" 
+                                    dataKey="count" 
+                                    stroke="hsl(var(--primary))" 
+                                    strokeWidth={3} 
+                                    dot={{ r: 4, fill: 'white', strokeWidth: 2 }} 
+                                    activeDot={{ r: 6 }}
+                                />
+                            </LineChart>
+                        </ResponsiveContainer>
                     </CardContent>
-                  </Card>
-                </section>
+                </Card>
 
-                <section>
-                  <h2 className="text-lg font-heading font-bold mb-4">Quick Workspace Hub</h2>
-                  <div className="grid grid-cols-2 gap-4">
-                      <HubButton icon={Users} label="Family DB" path={`/${user?.role?.replace('_', '-')}/families`} />
-                      <HubButton icon={BarChart3} label="View Analytics" path={`/${user?.role?.replace('_', '-')}/reports`} />
-                      <HubButton icon={ClipboardList} label="Pending Tasks" path="#" disabled />
-                      {user?.role !== 'ward_volunteer' && <HubButton icon={Shield} label="User Control" path={`/${user?.role?.replace('_', '-')}/panel`} />}
-                      <HubButton icon={Search} label="Global Search" path={`/${user?.role?.replace('_', '-')}/directory`} />
-                      <HubButton icon={MapPin} label="Area Map" path="#" disabled />
-                  </div>
-                </section>
+                {/* Profession Distribution Pie */}
+                <Card className="rounded-2xl shadow-sm border-none bg-white">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Briefcase className="h-5 w-5 text-slate-400" /> व्यवसाय वितरण (Profession)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[350px] flex items-center justify-center p-0">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie
+                                    data={charts.professionDistribution}
+                                    cx="50%"
+                                    cy="50%"
+                                    innerRadius={60}
+                                    outerRadius={100}
+                                    paddingAngle={5}
+                                    dataKey="count"
+                                    nameKey="profession"
+                                >
+                                    {charts.professionDistribution?.map((_: any, index: number) => (
+                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                </Pie>
+                                <Tooltip />
+                                <Legend layout="vertical" align="right" verticalAlign="middle" iconType="circle" wrapperStyle={{fontSize: '11px'}} />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid lg:grid-cols-2 gap-8">
+                {/* Location Wise Bar Chart */}
+                <Card className="rounded-2xl shadow-sm border-none bg-white">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <MapPin className="h-5 w-5 text-slate-400" /> जिला-वार डेटा (Location Analysis)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={charts.locationDistribution}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                <XAxis dataKey="district__name" axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10}} />
+                                <Tooltip cursor={{fill: 'transparent'}} />
+                                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} barSize={40} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+
+                {/* Smart Insights & Alerts */}
+                <Card className="rounded-2xl shadow-sm border-none bg-primary/5 border-primary/10">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Lightbulb className="h-5 w-5 text-yellow-500" /> स्मार्ट अंतर्दृष्टि (Smart Insights)
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex items-start gap-4 p-4 bg-white rounded-xl shadow-sm">
+                            <div className="bg-primary/10 p-2 rounded-lg text-primary"><Activity className="h-5 w-5" /></div>
+                            <div>
+                                <p className="font-bold text-slate-800">सर्वाधिक सक्रिय क्षेत्र (Top Area)</p>
+                                <p className="text-sm text-slate-500">{insights.mostActiveArea} क्षेत्र में इस सप्ताह सबसे अधिक पंजीकरण हुए हैं।</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-4 p-4 bg-white rounded-xl shadow-sm">
+                            <div className="bg-orange-500/10 p-2 rounded-lg text-orange-600"><Briefcase className="h-5 w-5" /></div>
+                            <div>
+                                <p className="font-bold text-slate-800">प्रमुख व्यवसाय (Lead Profession)</p>
+                                <p className="text-sm text-slate-500">{insights.topProfession} वर्ग के लोग समुदाय में सबसे अधिक सक्रिय हैं।</p>
+                            </div>
+                        </div>
+                        <div className="p-4 border-2 border-dashed border-primary/20 rounded-xl">
+                            <p className="text-xs text-primary font-bold uppercase tracking-wider mb-2">सिफ़ारिश (Recommendation)</p>
+                            <p className="text-sm text-slate-600">अधूरे प्रोफाइल वाले सदस्यों को SMS रिमाइंडर्स भेजकर डेटा पूर्णता बढ़ाएं।</p>
+                            <Button variant="link" className="p-0 h-auto text-primary text-xs mt-2">कार्रवाई करें (Take Action) →</Button>
+                        </div>
+                    </CardContent>
+                </Card>
             </div>
         </div>
     );
 };
 
-const HubButton = ({ icon: Icon, label, path, disabled }: { icon: any; label: string; path: string; disabled?: boolean }) => (
-  <Button asChild={!disabled} disabled={disabled} variant="outline" className="h-20 flex-col gap-2 glass-card border-none hover:bg-primary/5 hover:text-primary transition-all group shadow-sm bg-white dark:bg-black/20">
-    {disabled ? (
-      <>
-        <Icon className="h-5 w-5 opacity-40" />
-        <span className="text-xs font-semibold opacity-40">{label}</span>
-      </>
-    ) : (
-      <Link to={path}>
-        <Icon className="h-5 w-5 group-hover:scale-110 transition-transform" />
-        <span className="text-xs font-semibold">{label}</span>
-      </Link>
-    )}
-  </Button>
-);
+const MetricCard = ({ title, value, icon: Icon, color, subText }: { title: string, value: any, icon: any, color: string, subText: string }) => {
+    const colorClasses: Record<string, string> = {
+        blue: "text-blue-600 bg-blue-50",
+        purple: "text-purple-600 bg-purple-50",
+        green: "text-green-600 bg-green-50",
+        orange: "text-orange-600 bg-orange-50",
+    };
 
-const TableComponent = ({ risks }: { risks: CommunityInsights['geographicRisks'] }) => (
-  <div className="divide-y divide-amber-100 dark:divide-amber-950/20">
-    {risks.unmappedFamilies.slice(0, 3).map((r, i) => (
-      <div key={i} className="px-5 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-none px-1.5 h-5 text-[10px]">FIX REQUIRED</Badge>
-          <span className="text-sm font-semibold">{r.count} families unmapped in {r.area}</span>
-        </div>
-        <Button variant="ghost" size="sm" className="h-8 text-xs hover:bg-amber-100 dark:hover:bg-amber-950/40">Resolve</Button>
-      </div>
-    ))}
-    {risks.inactiveWards.slice(0, 2).map((w, i) => (
-      <div key={i} className="px-5 py-3 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <Badge variant="outline" className="bg-destructive/10 text-destructive hover:bg-destructive/10 border-none px-1.5 h-5 text-[10px]">CRITICAL</Badge>
-          <span className="text-sm font-semibold">{w.ward} ward reported zero activity since {w.lastActivity}</span>
-        </div>
-        <Button variant="ghost" size="sm" className="h-8 text-xs hover:bg-destructive/10">Follow up</Button>
-      </div>
-    ))}
-  </div>
-);
+    return (
+        <Card className="rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 border-none bg-white group overflow-hidden">
+            <CardContent className="p-6">
+                <div className="flex justify-between items-start mb-4">
+                    <div className={`p-3 rounded-2xl ${colorClasses[color]} group-hover:scale-110 transition-transform`}>
+                        <Icon className="h-6 w-6" />
+                    </div>
+                </div>
+                <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest leading-none mb-2">{title}</p>
+                    <p className="text-3xl font-black text-slate-900 mb-1">{value?.toLocaleString() || 0}</p>
+                    <p className="text-[11px] font-medium text-slate-500 flex items-center gap-1">
+                        {subText}
+                    </p>
+                </div>
+            </CardContent>
+            <div className={`h-1 w-full bg-${color}-500 opacity-20`} />
+        </Card>
+    );
+};
 
 export default DashboardHome;

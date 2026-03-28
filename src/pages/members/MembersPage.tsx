@@ -1,286 +1,279 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Eye, Pencil, Trash2, Plus, Search, User } from "lucide-react";
+import { 
+  Eye, Pencil, Trash2, Plus, Search, User as UserIcon, 
+  ArrowUpDown, ChevronLeft, ChevronRight, CheckSquare, Square, 
+  Filter, LayoutGrid, LayoutList, MapPinned, Building2, Phone, Heart, Users
+} from "lucide-react";
+import { Link } from "react-router-dom";
+import MemberFormDialog from "@/components/MemberFormDialog";
 import { useToast } from "@/hooks/use-toast";
-
+import { API_BASE_URL } from "@/services/api";
 import { useAuth } from "@/context/AuthContext";
-import { getMembers, createMember, deleteMember, updateMember } from "@/services/membersApi";
+import { getMembers, deleteMember } from "@/services/membersApi";
 import { getFamilies } from "@/services/familiesApi";
+import { getLocations } from "@/services/locationsApi";
+import { getCommunities } from "@/services/communitiesApi";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+type SortConfig = {
+  key: string; direction: 'asc' | 'desc' | null;
+};
 
 export default function MembersPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  
+  // Data States
   const [membersData, setMembersData] = useState<any[]>([]);
   const [familiesData, setFamiliesData] = useState<any[]>([]);
+  const [locations, setLocations] = useState<any[]>([]);
+  const [communities, setCommunities] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
-  const { toast } = useToast();
+  
+  // Filters State
+  const [filters, setFilters] = useState({
+    community: "all",
+    district: "all",
+    vidhansabha: "all",
+    ward: "all",
+    gender: "all",
+    profession: "all"
+  });
 
-  // Add/Edit Member Form State
-  const [editId, setEditId] = useState<string | null>(null);
-  const [familyId, setFamilyId] = useState("");
-  const [name, setName] = useState("");
-  const [relation, setRelation] = useState("");
-  const [dob, setDob] = useState("");
-  const [education, setEducation] = useState("");
-  const [profession, setProfession] = useState("");
-  const [maritalStatus, setMaritalStatus] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [isOpen, setIsOpen] = useState(false);
+  // Table States
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'name', direction: 'asc' });
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  // Dialog State
+  const [selectedMember, setSelectedMember] = useState<any>(null);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [memRes, famRes] = await Promise.all([
-        getMembers(),
-        getFamilies()
+      const apiParams: any = {};
+      if (search) apiParams.search = search;
+      if (filters.community !== 'all') apiParams.family__community = filters.community;
+      if (filters.district !== 'all') apiParams.family__district = filters.district;
+      if (filters.vidhansabha !== 'all') apiParams.family__vidhansabha = filters.vidhansabha;
+      if (filters.ward !== 'all') apiParams.family__ward = filters.ward;
+      if (filters.gender !== 'all') apiParams.gender = filters.gender;
+      if (filters.profession !== 'all') apiParams.profession = filters.profession;
+
+      const [memRes, famRes, locRes, commRes] = await Promise.all([
+        getMembers(apiParams), getFamilies(), getLocations(), getCommunities()
       ]);
-      
       setMembersData(memRes.data.results || memRes.data || []);
       setFamiliesData(famRes.data.results || famRes.data || []);
+      setLocations(locRes.data.results || locRes.data || []);
+      setCommunities(commRes.data.results || commRes.data || []);
     } catch (e) {
       console.error(e);
+      setMembersData([]); // Clear stale data on error
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, [search, filters]);
 
-  const filtered = membersData.filter((m: any) => {
-    const s = search.toLowerCase();
-    return m.name?.toLowerCase().includes(s) || m.mobile?.includes(s) || m.relation?.toLowerCase().includes(s);
-  });
-
-  const handleEditClick = (m: any) => {
-    setEditId(m.id);
-    setFamilyId(m.family);
-    setName(m.name || "");
-    setRelation(m.relation || "");
-    setDob(m.dob || "");
-    setEducation(m.education || "");
-    setProfession(m.profession || "");
-    setMaritalStatus(m.marital_status || "");
-    setMobile(m.mobile || "");
-    setIsOpen(true);
+  const handleSort = (key: string) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    setSortConfig({ key, direction });
   };
 
-  const handleAddMember = async () => {
-    if (!familyId) {
-      toast({ title: "कृपया एक परिवार चुनें (Please select a family)", variant: "destructive" });
-      return;
-    }
-    try {
-      const payload = { family: familyId, name, relation, dob, education, profession, marital_status: maritalStatus, mobile };
-      if (editId) {
-        await updateMember(editId, payload);
-        toast({ title: "सदस्य सफलतापूर्वक अपडेट किया गया (Member updated successfully)" });
-      } else {
-        await createMember(payload);
-        toast({ title: "सदस्य सफलतापूर्वक जोड़ा गया (Member added successfully)" });
-      }
+  const filteredAndSorted = useMemo(() => {
+    let items = [...membersData];
 
-      setIsOpen(false);
-      fetchData();
-      
-      // Reset loosely
-      setEditId(null);
-      setName(""); setRelation(""); setDob(""); setEducation(""); setProfession(""); setMaritalStatus(""); setMobile("");
-    } catch (e: any) {
-      const msg = e.response?.data ? JSON.stringify(e.response.data) : e.message;
-      toast({ title: "त्रुटि (Error)", description: msg, variant: "destructive" });
+    if (sortConfig.key && sortConfig.direction) {
+      items.sort((a, b) => {
+        const aVal = a[sortConfig.key] || "";
+        const bVal = b[sortConfig.key] || "";
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
     }
+    return items;
+  }, [membersData, sortConfig]);
+
+  const totalPages = Math.ceil(filteredAndSorted.length / itemsPerPage);
+  const paginatedData = filteredAndSorted.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  const handleSelectOne = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("क्या आप सुनिश्चित हैं कि आप इसे हटाना चाहते हैं?")) return;
+    if (!confirm("क्या आप इस सदस्य को हटाना चाहते हैं?")) return;
     try {
       await deleteMember(id);
-      toast({ title: "सदस्य हटा दिया गया है" });
+      toast({ title: "सदस्य हटा दिया गया" });
       fetchData();
     } catch (e) {}
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6 animate-fade-in text-slate-800 pb-12">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground">सदस्य सूची (Members)</h1>
-          <p className="text-sm text-muted-foreground mt-1">अपने क्षेत्र के सभी सदस्यों का विवरण प्रबंधित करें</p>
+          <h1 className="text-3xl font-heading font-black text-slate-900 flex items-center gap-2">
+            <UserIcon className="h-8 w-8 text-indigo-600" /> सदस्य डेटाबेस (Members DB)
+          </h1>
+          <p className="text-sm text-slate-500 mt-1 uppercase tracking-widest font-bold">Community Census Registry</p>
         </div>
-        <Dialog open={isOpen} onOpenChange={(open) => {
-          setIsOpen(open);
-          if (!open) { setEditId(null); setName(""); setRelation(""); setDob(""); setEducation(""); setProfession(""); setMaritalStatus(""); setMobile(""); setFamilyId(""); }
-        }}>
-          <DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" /> नया सदस्य जोड़ें</Button></DialogTrigger>
-          <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader><DialogTitle className="font-heading border-b pb-2">{editId ? "सदस्य विवरण अपडेट करें (Update Member)" : "नया सदस्य विवरण दर्ज करें (Add Member)"}</DialogTitle></DialogHeader>
-            <div className="grid grid-cols-2 gap-5 py-4">
-              <div className="col-span-2">
-                <Label>परिवार का चयन करें (Select Family) <span className="text-red-500">*</span></Label>
-                <Select value={familyId} onValueChange={setFamilyId}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="सूची से परिवार खोजें और चुनें" /></SelectTrigger>
-                  <SelectContent>
-                    {familiesData.map((f: any) => (
-                      <SelectItem key={f.id} value={f.id}>{f.name} (कोड: {f.family_code})</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div className="col-span-2"><Label>पूरा नाम (Full Name) <span className="text-red-500">*</span></Label><Input value={name} onChange={e=>setName(e.target.value)} placeholder="व्यक्ति का पूरा नाम" className="mt-1" /></div>
-              
-              <div>
-                <Label>मुखिया से रिश्ता (Relation)</Label>
-                <Select value={relation} onValueChange={setRelation}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="रिश्ता चुनें (Select Relation)" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="स्वयं (Self)">स्वयं (Self)</SelectItem>
-                    <SelectItem value="पिता (Father)">पिता (Father)</SelectItem>
-                    <SelectItem value="माँ (Mother)">माँ (Mother)</SelectItem>
-                    <SelectItem value="भाई (Brother)">भाई (Brother)</SelectItem>
-                    <SelectItem value="बहन (Sister)">बहन (Sister)</SelectItem>
-                    <SelectItem value="पति (Husband)">पति (Husband)</SelectItem>
-                    <SelectItem value="पत्नी (Wife)">पत्नी (Wife)</SelectItem>
-                    <SelectItem value="बेटा (Son)">बेटा (Son)</SelectItem>
-                    <SelectItem value="बेटी (Daughter)">बेटी (Daughter)</SelectItem>
-                    <SelectItem value="दादा (Grandfather)">दादा (Grandfather)</SelectItem>
-                    <SelectItem value="दादी (Grandmother)">दादी (Grandmother)</SelectItem>
-                    <SelectItem value="पोता (Grandson)">पोता (Grandson)</SelectItem>
-                    <SelectItem value="पोती (Granddaughter)">पोती (Granddaughter)</SelectItem>
-                    <SelectItem value="चाचा (Uncle)">चाचा (Uncle)</SelectItem>
-                    <SelectItem value="चाची (Aunt)">चाची (Aunt)</SelectItem>
-                    <SelectItem value="भतीजा (Nephew)">भतीजा (Nephew)</SelectItem>
-                    <SelectItem value="भतीजी (Niece)">भतीजी (Niece)</SelectItem>
-                    <SelectItem value="साला (Brother-in-law)">साला (Brother-in-law)</SelectItem>
-                    <SelectItem value="साली (Sister-in-law)">साली (Sister-in-law)</SelectItem>
-                    <SelectItem value="अन्य (Other)">अन्य (Other)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div><Label>जन्म तिथि (DOB)</Label><Input type="date" value={dob} onChange={e=>setDob(e.target.value)} className="mt-1" /></div>
-              
-              <div>
-                <Label>शिक्षा (Education)</Label>
-                <Select value={education} onValueChange={setEducation}>
-                  <SelectTrigger className="mt-1 font-normal"><SelectValue placeholder="चुने" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="10th">10वीं</SelectItem>
-                    <SelectItem value="12th">12वीं</SelectItem>
-                    <SelectItem value="Graduation">स्नातक (Graduation)</SelectItem>
-                    <SelectItem value="Post Graduation">स्नातकोत्तर (Master)</SelectItem>
-                    <SelectItem value="PhD">पीएचडी (PhD)</SelectItem>
-                    <SelectItem value="ITI/Diploma">आईटीआई/डिप्लोमा</SelectItem>
-                    <SelectItem value="Uneducated">निरक्षर</SelectItem>
-                    <SelectItem value="Other">अन्य</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>व्यवसाय / पेशा (Profession)</Label>
-                <Select value={profession} onValueChange={setProfession}>
-                  <SelectTrigger className="mt-1 font-normal"><SelectValue placeholder="चुने" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Business">व्यापार (Business)</SelectItem>
-                    <SelectItem value="Private Job">निजी नौकरी</SelectItem>
-                    <SelectItem value="Govt Job">सरकारी नौकरी</SelectItem>
-                    <SelectItem value="Student">विद्यार्थी</SelectItem>
-                    <SelectItem value="Agriculture">कृषि</SelectItem>
-                    <SelectItem value="Housewife">गृहिणी</SelectItem>
-                    <SelectItem value="Self Employed">स्व-रोजगार</SelectItem>
-                    <SelectItem value="Retired">निवृत्त</SelectItem>
-                    <SelectItem value="Other">अन्य</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <Label>वैवाहिक स्थिति (Marital Status)</Label>
-                <Select value={maritalStatus} onValueChange={setMaritalStatus}>
-                  <SelectTrigger className="mt-1"><SelectValue placeholder="वैवाहिक स्थिति चुनें" /></SelectTrigger>
-                  <SelectContent>
-                      <SelectItem value="unmarried">अविवाहित (Unmarried)</SelectItem>
-                      <SelectItem value="married">विवाहित (Married)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div><Label>मोबाइल (Mobile)</Label><Input value={mobile} onChange={e=>setMobile(e.target.value)} placeholder="10-अंकीय नंबर " className="mt-1" /></div>
-              
-              <div className="col-span-2 mt-2"><Button className="w-full" size="lg" onClick={handleAddMember} disabled={!familyId || !name}>{editId ? "सदस्य अपडेट करें (Update)" : "सदस्य सहेजें (Save)"}</Button></div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-
-      <div className="glass-card p-4 flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="सदस्य का नाम, रिश्ता या मोबाइल नंबर से खोजें..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <div className="flex gap-2">
+           <Button size="lg" className="rounded-2xl shadow-xl shadow-indigo-600/20 hover:scale-105 active:scale-95 transition-all px-8 font-heading bg-indigo-600 hover:bg-indigo-700" onClick={() => { setSelectedMember(null); setIsDialogOpen(true); }}>
+              <Plus className="h-5 w-5 mr-2" /> नया सदस्य (New Member)
+           </Button>
         </div>
       </div>
 
-      <div className="glass-card overflow-hidden">
+      <div className="glass-card p-6 flex flex-col gap-6 bg-white shadow-xl rounded-3xl border border-slate-100">
+        {/* Filters Bar */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+           <div className="relative col-span-1 sm:col-span-2">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+              <Input placeholder="नाम, मोबाइल, व्यवसाय से खोजें..." value={search} onChange={e => { setSearch(e.target.value); setCurrentPage(1); }} className="pl-12 h-12 rounded-xl border-slate-100 bg-slate-50/50" />
+           </div>
+
+           <Select value={filters.community} onValueChange={v => setFilters({...filters, community: v})}>
+              <SelectTrigger className="h-12 rounded-xl border-slate-100 font-bold"><SelectValue placeholder="समाज" /></SelectTrigger>
+              <SelectContent className="rounded-xl">
+                 <SelectItem value="all">सभी समाज</SelectItem>
+                 {communities.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+           </Select>
+
+           <Select value={filters.district} onValueChange={v => setFilters({...filters, district: v})}>
+              <SelectTrigger className="h-12 rounded-xl border-slate-100 font-bold"><SelectValue placeholder="ज़िला" /></SelectTrigger>
+              <SelectContent className="rounded-xl">
+                 <SelectItem value="all">सभी ज़िले</SelectItem>
+                 {locations.filter(l => l.type === 'district').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+              </SelectContent>
+           </Select>
+
+           <div className="flex gap-2">
+              <Button variant="outline" className="h-12 rounded-xl border-slate-100 bg-white shadow-sm flex-1 font-bold" onClick={() => setFilters({community: "all", district: "all", vidhansabha: "all", ward: "all", gender: "all", profession: "all"})}>
+                 <Filter className="h-4 w-4 mr-2" /> Reset
+              </Button>
+           </div>
+        </div>
+
+        {/* Level 2 Filters */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-6 gap-4 pt-4 border-t border-slate-50">
+           <Select value={filters.vidhansabha} onValueChange={v => setFilters({...filters, vidhansabha: v})}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-50 text-[10px] font-black uppercase tracking-tighter"><SelectValue placeholder="विधानसभा" /></SelectTrigger>
+              <SelectContent className="rounded-lg">
+                 <SelectItem value="all">सभी विधानसभा</SelectItem>
+                 {locations.filter(l => l.type === 'vidhansabha' && (filters.district === 'all' || l.parent === filters.district || l.parent_id === filters.district)).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+              </SelectContent>
+           </Select>
+           <Select value={filters.ward} onValueChange={v => setFilters({...filters, ward: v})}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-50 text-[10px] font-black uppercase tracking-tighter"><SelectValue placeholder="वार्ड" /></SelectTrigger>
+              <SelectContent className="rounded-lg">
+                 <SelectItem value="all">सभी वार्ड</SelectItem>
+                 {locations.filter(l => l.type === 'ward' && (filters.vidhansabha === 'all' || l.parent === filters.vidhansabha || l.parent_id === filters.vidhansabha)).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+              </SelectContent>
+           </Select>
+           <Select value={filters.gender} onValueChange={v => setFilters({...filters, gender: v})}>
+              <SelectTrigger className="h-10 rounded-lg border-slate-50 text-[10px] font-black uppercase tracking-tighter"><SelectValue placeholder="लिंग (Gender)" /></SelectTrigger>
+              <SelectContent className="rounded-lg">
+                 <SelectItem value="all">सभी</SelectItem>
+                 <SelectItem value="Male">पुरुष (Male)</SelectItem>
+                 <SelectItem value="Female">महिला (Female)</SelectItem>
+                 <SelectItem value="Other">अन्य (Other)</SelectItem>
+              </SelectContent>
+           </Select>
+        </div>
+      </div>
+
+      <div className="glass-card border-none shadow-2xl rounded-3xl bg-white overflow-hidden">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/30">
-              <TableHead className="font-bold">नाम (Name)</TableHead>
-              <TableHead className="font-bold">रिश्ता (Relation)</TableHead>
-              <TableHead className="hidden md:table-cell font-bold">मोबाइल</TableHead>
-              <TableHead className="hidden md:table-cell font-bold">शिक्षा</TableHead>
-              <TableHead className="hidden lg:table-cell font-bold">व्यवसाय</TableHead>
-              <TableHead className="font-bold">स्थिति (Status)</TableHead>
-              <TableHead className="font-bold">कार्रवाई</TableHead>
+            <TableRow className="bg-slate-50/80 hover:bg-slate-50">
+              <TableHead className="w-12 py-5 px-6"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedIds(selectedIds.length === paginatedData.length ? [] : paginatedData.map(d => d.id))}>{selectedIds.length === paginatedData.length ? <CheckSquare className="h-5 w-5 text-indigo-600" /> : <Square className="h-5 w-5" />}</Button></TableHead>
+              <TableHead className="font-black uppercase text-[10px] tracking-widest cursor-pointer" onClick={() => handleSort('name')}>नाम (Name)</TableHead>
+              <TableHead className="font-black uppercase text-[10px] tracking-widest">वार्ड / विधानसभा</TableHead>
+              <TableHead className="font-black uppercase text-[10px] tracking-widest">संबंध / मुखिया</TableHead>
+              <TableHead className="font-black uppercase text-[10px] tracking-widest">व्यवसाय</TableHead>
+              <TableHead className="font-black uppercase text-[10px] tracking-widest text-right pr-10">विकल्प</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-               <TableRow><TableCell colSpan={7} className="text-center py-6 text-muted-foreground">डेटा लोड हो रहा है (Loading)...</TableCell></TableRow>
-            ) : filtered.length === 0 ? (
-               <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">इस क्षेत्र में कोई सदस्य नहीं मिला।</TableCell></TableRow>
-            ) : (
-             filtered.map((m: any) => (
-              <TableRow key={m.id} className="hover:bg-muted/10">
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="bg-muted h-8 w-8 rounded-full flex items-center justify-center text-primary/70 ring-1 ring-border">
-                       <User className="h-4 w-4" />
+                <TableRow><TableCell colSpan={6} className="text-center py-20"><div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto" /></TableCell></TableRow>
+            ) : paginatedData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-32 bg-slate-50/20">
+                     <div className="flex flex-col items-center gap-4 text-slate-300">
+                        <div className="p-4 bg-white rounded-full shadow-sm shadow-slate-100 ring-1 ring-slate-100"><Search className="h-10 w-10" /></div>
+                        <p className="text-sm font-black uppercase tracking-widest">No members found matching your search</p>
+                        <Button variant="link" className="text-primary font-bold text-xs" onClick={() => { setSearch(""); setFilters({community: "all", district: "all", vidhansabha: "all", ward: "all", gender: "all", profession: "all"}); }}>Reset all filters</Button>
+                     </div>
+                  </TableCell>
+                </TableRow>
+            ) : paginatedData.map((m: any) => (
+                <TableRow key={m.id} className="hover:bg-indigo-50/30 transition-colors">
+                  <TableCell className="px-6 py-4"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleSelectOne(m.id)}>{selectedIds.includes(m.id) ? <CheckSquare className="h-5 w-5 text-indigo-600" /> : <Square className="h-5 w-5" />}</Button></TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                       <div className="h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 overflow-hidden">
+                          {m.photo ? <img src={m.photo} className="h-full w-full object-cover" /> : <UserIcon className="h-5 w-5" />}
+                       </div>
+                       <div>
+                          <p className="font-bold text-slate-800">{m.name}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{m.mobile || "No Mobile"}</p>
+                       </div>
                     </div>
-                    <span className="font-semibold text-primary">{m.name}</span>
-                  </div>
-                </TableCell>
-                <TableCell><Badge variant="outline" className="text-xs bg-background">{m.relation || "N/A"}</Badge></TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">{m.mobile || "N/A"}</TableCell>
-                <TableCell className="hidden md:table-cell text-muted-foreground">{m.education || "N/A"}</TableCell>
-                <TableCell className="hidden lg:table-cell text-muted-foreground">{m.profession || "N/A"}</TableCell>
-                <TableCell>
-                    <Badge variant={m.marital_status === "married" ? "outline" : "secondary"} className={`text-xs ${m.marital_status === "married" ? "border-green-200 text-green-700 bg-green-50" : ""}`}>
-                        {m.marital_status === "married" ? "विवाहित" : m.marital_status === "unmarried" ? "अविवाहित" : (m.marital_status || "N/A")}
-                    </Badge>
-                </TableCell>
-                <TableCell>
-                  <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10" onClick={() => handleEditClick(m)} title="संपादित करें (Edit)">
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={() => handleDelete(m.id)} title="हटाएं (Delete)">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-             ))
-            )}
+                  </TableCell>
+                  <TableCell>
+                      <div className="space-y-0.5">
+                          <p className="text-xs font-bold text-slate-700">{m.ward_name || "N/A"}</p>
+                          <p className="text-[9px] uppercase text-slate-400 font-black tracking-tighter">{m.vidhansabha_name || m.district_name || "Region Unknown"}</p>
+                      </div>
+                  </TableCell>
+                  <TableCell>
+                      <div className="space-y-0.5">
+                          <p className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full inline-block">{m.relation}</p>
+                          <p className="text-xs text-slate-500 truncate max-w-[120px]">Fam: {m.family_name}</p>
+                      </div>
+                  </TableCell>
+                  <TableCell><Badge variant="outline" className="rounded-lg text-[10px] font-black opacity-70">{m.profession || "General"}</Badge></TableCell>
+                  <TableCell className="text-right pr-6">
+                    <div className="flex justify-end gap-2 text-indigo-600">
+                      <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => { setSelectedMember(m); setIsDialogOpen(true); }}><Pencil className="h-4 w-4" /></Button>
+                      <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" onClick={() => handleDelete(m.id)}><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+            ))}
           </TableBody>
         </Table>
+
+        <div className="p-6 bg-slate-50/30 border-t flex items-center justify-between">
+           <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Total <span className="text-slate-900">{filteredAndSorted.length}</span> Members Found</p>
+           <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p-1))} disabled={currentPage === 1} className="rounded-lg h-10 w-10"><ChevronLeft className="h-4 w-4" /></Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))} disabled={currentPage === totalPages || totalPages === 0} className="rounded-lg h-10 w-10"><ChevronRight className="h-4 w-4" /></Button>
+           </div>
+        </div>
       </div>
+
+      <MemberFormDialog 
+        isOpen={isDialogOpen} 
+        onClose={() => { setIsDialogOpen(false); setSelectedMember(null); }} 
+        memberData={selectedMember} 
+        onSuccess={fetchData} 
+      />
     </div>
   );
 }

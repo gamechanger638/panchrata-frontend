@@ -125,4 +125,14 @@
     transform: translateY(-2px);
     box-shadow: var(--shadow-elevated);
   }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-slate-100/50 rounded-full;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full border-2 border-solid border-transparent bg-clip-padding hover:bg-slate-400 transition-colors;
+  }
 }

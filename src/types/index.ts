@@ -26,7 +26,7 @@ export interface Member {
   fatherName: string;
   motherName: string;
   dob: string;
-  gender: Gender;
+  gender: string;
   education: string;
   profession: string;
   maritalStatus: MaritalStatus;
@@ -39,6 +39,13 @@ export interface Member {
   gotra: string;
   panchratnaCategory: PanchratnaCategory;
   age: number;
+  height?: string;
+  colour?: string;
+  gotra_image?: string;
+  profile_image?: string;
+  photo1?: string;
+  photo2?: string;
+  photo3?: string;
 }
 
 export interface MarriageProfile {
